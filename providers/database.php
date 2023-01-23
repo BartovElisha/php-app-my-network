@@ -5,18 +5,14 @@ require_once dirname(__FILE__, 2) . '/config/config.php';
 class Database
 {
     private
-    $db_conn;
+    $db_conn,
+    $affected_row;
 
     public function connect()
     {
         try {
-            $this->db_conn = mysqli_connect(
-                DB_URL,
-                DB_USER,
-                DB_PWD,
-                DB_NAME
-            );
-        } catch (Exception $err) {
+            $this->db_conn = new PDO(PDO_CFG, DB_USER, DB_PWD);
+        } catch (PDOException $err) {
             echo json_encode([
                 "ok" => false,
                 "error" => $err->getMessage()
@@ -24,26 +20,32 @@ class Database
         }
     }
 
-    public function selectRecords($sql)
+    public function dbQuery($sql, $params = [])
     {
-        $data = [];
-        $result = mysqli_query($this->db_conn, $sql);
+        $this->affected_row = 0;
 
-        if (!$result || mysqli_num_rows($result) === 0) {
-            return $data;
+        if (!isset($this->db_conn) || empty($this->db_conn)) {
+            $this->connect();
         }
 
-        while ($row = mysqli_fetch_assoc($result)) {
-            $data[] = $row;
-        }
+        try {
+            $query = $this->db_conn->prepare($sql);
+            $query->execute($params);
+            $result = $query->fetchAll(PDO::FETCH_ASSOC);
+            $this->affected_row = $query->rowCount();
+            return $result;
 
-        return $data;
+        } catch (PDOException $err) {
+            echo json_encode([
+                "ok" => false,
+                "error" => $err->getMessage()
+            ]);
+        }
     }
 
-    public function runQuery($sql)
+    public function affectedCount()
     {
-        $result = mysqli_query($this->db_conn, $sql);
-        return ($result && mysqli_affected_rows($this->db_conn) > 0);
+        return $this->affected_row;
     }
 
     public function close()
